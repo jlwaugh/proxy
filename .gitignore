@@ -1,4 +1,7 @@
+.env
 /target
+*/target/
+**/target/
 /wasi-sdk*
 binaryen-*
 node_modules
@@ -19,3 +22,4 @@ file_list.txt
 freeze_frames
 example-contracts.car
 yarn-error.log
+.spin/
