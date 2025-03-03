@@ -1,61 +1,89 @@
-Rust WebAssembly smart contracts for NEAR with Javascript runtime
-================================================================
+# AI Proxy
 
-This project shows compiling and embedding [QuickJS](https://bellard.org/quickjs/) with https://github.com/near/near-sdk-rs for being able to execute custom JavaScript code inside a smart contract written in Rust. It contains examples of standard contracts like NFT and Fungible token, with JavaScript customization layers on top. There are also examples of a [web4](https://github.com/vgrichina/web4) contract.
+This folder contains a [Spin](https://www.fermyon.com/spin) application, based on the WASI 2 and the WebAssembly Component Model ( https://component-model.bytecodealliance.org/ ). It is implemented in Rust as a serverless proxy for the OpenAI API.
 
-Check out the youtube playlist with videos showing the project:
+There is a simple example of a web client in the [web](./web/) folder.
 
-https://www.youtube.com/watch?v=JBZEr__pid0&list=PLv5wm4YuO4IwVNrSsYxeqKrtQZYRML03Z
+The application will keep track of token usage per conversation in the built-in key-value storage of Spin. The initial balance for a conversation is retrieved from the Fungible Token smart contract.
 
-Also check out the [end-to-end](#end-to-end-tests-using-near-workspaces) tests for how to use the contracts from this project.
+To launch the application, make sure to have the Spin SDK installed.
 
-# Purpose / NEAR ecosystem impact
+You also need to set some environment variables:
 
-The purpose of the project is to provide an example and starting point for adding the Javascript layer in Rust smart contracts. Being able to execute custom Javascript code makes it possible to configure behaviour of Rust smart contracts in a dynamic way through code, and not just JSON configuration. My own motivation was to run Javascript music code inside a smart contract ( see the [WebAssembly Music](https://github.com/petersalomonsen/javascriptmusic) project), and then I also saw this [tweet](https://x.com/ilblackdragon/status/1561368373618941954) that the combination of Javascript and Rust WebAssembly was needed for other projects in the NEAR ecosystem too.
+- `SPIN_VARIABLE_OPENAI_API_KEY` your OpenAI API key.
+- `SPIN_VARIABLE_OPENAI_API_KEY_METHOD` specifies the method to provide the API key. Use `authorization` for OpenAI (default) and `api-key` for Azure OpenAI.
+- `SPIN_VARIABLE_REFUND_SIGNING_KEY` an ed21159 secret key that will be used to sign refund requests. You can run the [create-refund-signing-keypair.js](./create-refund-signing-keypair.js) script to create the keypair. Run it using the command `$(node create-refund-signing-keypair.js)` and it will set the environment variable for you.
+- `SPIN_VARIABLE_FT_CONTRACT_ID` the NEAR contract account id. e.g `aitoken.test.near`
+- `SPIN_VARIABLE_OPENAI_COMPLETIONS_ENDPOINT` OpenAI API completions endpoint. E.g. https://api.openai.com/v1/chat/completions
+- `SPIN_VARIABLE_RPC_URL` The NEAR RPC node URL. E.g. https://rpc.mainnet.near.org
 
-Since this project has examples for various Rust standard smart contracts on NEAR, the desired impact for projects in the NEAR ecosystem is to use these in their smart contract implementations. The combination of a customizable javascript layer on top of a rock solid Rust smart contract aims to provide flexibility without sacrificing robustness. The project also shows you how to use testing framework to ensure full End to End tests of the use cases. A comprehensive example of this is the OpenAI proxy using Fungible Tokens for covering usage costs ( see list of examples below ).
+Then run the following commands:
 
-# Devcontainer / github actions
+```
+spin build
+spin up
+```
 
-All the pre-requisities for getting the project up and running can be found in the [.devcontainer](./.devcontainer) folder, which will be automaticall set up if using a github codespace.
+This will start the OpenAI proxy server at http://localhost:3000
 
-The github actions also shows how to build and run all the examples.
+You can also launch the web client using for example [http-server](https://www.npmjs.com/package/http-server):
 
-# Architecture / structure
+```
+http-server web
+```
 
-QuickJS is built with [Emscripten](https://emscripten.org/) to a static library. Another C library, which can be found in the [quickjslib](./quickjslib/) folder, is providing a simplified interface to QuickJS, which is then linked to the Rust code along with other relevant static libraries from the Emscripten distribution ( such as the C standard library, allocator, WASI etc. ).
+You will then find the web client at http://localhost:8080. Here you can have a conversation with the AI model.
 
-See the entire build process in [build.rs](./build.rs).
+# Deploying
 
-In the Rust part, there are contract implementations exposing functions for submitting JavaScript code. Both in the internal bytecode format of QuickJS, and pure JS source code.
+## Deploying to Spin cloud
 
-# Unit tests running in WebAssembly
+While you can deploy to your own Kubernetes cluster using [spinkube](https://www.spinkube.dev/), the easiest approach, that we will describe here is to deploy to the [Fermyon cloud](https://www.fermyon.com/cloud).
 
-While it's common and more straightforward for NEAR smart contracts and many other Rust WebAssembly projects, to have their unit tests compiled to the native platform, this project runs the unit test in a WebAssembly runtime. The reason for this is because of the static libraries compiled from C, which are already targeting Wasm. One limitation when running tests inside the Wasm runtime is that you cannot catch panics, and so testing the error messages has to be done in the end-2-end tests
+You can find a prebuilt image at the [github registry](https://github.com/petersalomonsen/quickjs-rust-near/pkgs/container/near-ft-openai-proxy), and deploy it using the following command:
 
-# End-to-end tests using near-workspaces
+```bash
+spin deploy -f ghcr.io/petersalomonsen/near-ft-openai-proxy:v0.0.2 --variable refund_signing_key=4FGKKSoRmSVu5q8M1w1fuewJSNwKbM2Cw84EDcz3V2eB --variable ft_contract_id=arizcredits.testnet --variable openai_api_key=sk-Q4QE2pIc4LG_aA --variable rpc_url=https://rpc.testnet.near.org --variable openai_completions_endpoint=https://api.openai.com/v1/chat/completions
+```
 
-In the [e2e](./e2e/) folder and also within the [examples](./examples/) folders there are test files that demonstrates deployment and interaction with the contract using [near-workspaces-js](https://github.com/near/near-workspaces-js). All these tests are being run as part of the github actions pipeline, but you can also look at this for examples on how to use the contracts produced in this project.
+The variables passed in should be adjusted to your setup. Here's an explanation:
 
-# Local JS test environment
+- `refund_signing_key` - This is the signing key used by the AI proxy to sign refund requests. The contract needs the corresponding public key to verify signatures from the AI proxy.
+- `ft_contract_id` - This is the Fungible Token contract account id
+- `openai_api_key` - The API key for accessing the OpenAI completions endpoint
+- `rpc_url` - NEAR RPC node URL
+- `openai_completions_endpoint` - The OpenAI chat completion endpoint. Can be any OpenAI API compatible URL
 
-A simple mocking of NEAR interfaces for simulation of a smart contract directly in NodeJS or in the browser can be found in [localjstestenv](./localjstestenv/README.md).
+## Setting up the Fungible Token contract
 
-# Example contracts
+To set up the Fungible Token contract to use with the AI proxy, you need to provide initial supply and metadata. Here is an example of how the "ARIZ" token was set up on the testnet.
 
-- [NFT](./examples/nft/README.md) - The standard NFT contract, customizable with JavaScript
-- [Fungible Token](./examples/fungibletoken/README.md) - The standard FT contract, customizable with JavaScript
-- [OpenAI proxy](./examples/aiproxy/REAdME.md) - A proxy to an OpenAI API server interacting with the Fungible Token contract for covering usage costs
-- [Minimum Web4](./examples/minimumweb4/README.md) - Implement the web4 interface in JavaScript to serve a website from the smart contract
-- "[PureJS](./examples/purejs/README.md)" - Precompile the JS bytecode into the contract, and provide direct exports to the JS functions.
-- [Web4 and a WebAssembly Music showcase](./web4/README.md) - JavaScript from WebAssembly Music running in the smart contract
+```bash
+near contract call-function as-transaction arizcredits.testnet new json-args '{"owner_id": "arizcredits.testnet", "total_supply": "9999999999999", "metadata": { "spec": "ft-1.0.0","name": "Ariz credits","symbol": "ARIZ","decimals": 6, "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCIgdmlld0JveD0iMjI1IDMyMy4zIDkwIDEwMi45IiBzdHlsZT0iZW5hYmxlLWJhY2tncm91bmQ6bmV3IDIyNSAzMjMuMyA5MCAxMDIuOTsiIHhtbDpzcGFjZT0icHJlc2VydmUiPg0KPHN0eWxlIHR5cGU9InRleHQvY3NzIj4NCgkuc3Qwe2ZpbGw6IzM3NDUzNjt9DQoJLnN0MXtmaWxsOiNCREM2QjA7fQ0KCS5zdDJ7ZmlsbDojRjJBMzQxO30NCgkuc3Qze29wYWNpdHk6MC43NTtjbGlwLXBhdGg6dXJsKCNTVkdJRF8wMDAwMDEyNjI5Mzk1Njg3OTY0Mjk2Njk5MDAwMDAwNTIyMTQ4ODk5NTI1NDU0MDQ1NF8pO2ZpbGw6I0NFRDhCRjtlbmFibGUtYmFja2dyb3VuZDpuZXcgICAgO30NCgkuc3Q0e29wYWNpdHk6MC43NTtmaWxsOiNFMEM2NjY7ZW5hYmxlLWJhY2tncm91bmQ6bmV3ICAgIDt9DQoJLnN0NXtvcGFjaXR5OjAuNzU7Y2xpcC1wYXRoOnVybCgjU1ZHSURfMDAwMDAwNzIyNjM4MDU2OTM3MzIwNDg4MTAwMDAwMTU0Mzc2NjQ5ODcwODQ1ODE4MTlfKTtmaWxsOiNDRUQ4QkY7ZW5hYmxlLWJhY2tncm91bmQ6bmV3ICAgIDt9DQoJLnN0NntmaWxsOiNGMkYyRjM7fQ0KCS5zdDd7b3BhY2l0eTowLjc1O2NsaXAtcGF0aDp1cmwoI1NWR0lEXzAwMDAwMDg1MjI1MzI1NjAwNDEzOTI3NTIwMDAwMDA2NDcxMjI3Mzc2ODM3Njk2NjY3Xyk7ZmlsbDojQ0VEOEJGO2VuYWJsZS1iYWNrZ3JvdW5kOm5ldyAgICA7fQ0KCS5zdDh7b3BhY2l0eTowLjc1O2NsaXAtcGF0aDp1cmwoI1NWR0lEXzAwMDAwMDQwNTczODM1Mjg3MDI2MTIzNDEwMDAwMDEwMjQzNDkxMDA5NDg5ODI3MjI1Xyk7ZmlsbDojQ0VEOEJGO2VuYWJsZS1iYWNrZ3JvdW5kOm5ldyAgICA7fQ0KCS5zdDl7ZmlsbDojNDE0NDQyO30NCjwvc3R5bGU+DQo8Zz4NCgk8Zz4NCgkJPGc+DQoJCQk8cGF0aCBjbGFzcz0ic3QxIiBkPSJNMzE0LjcsMzIzLjNWMzk5aC0yMC43di03NS42SDMxNC43eiIvPg0KCQkJPHBvbHlnb24gY2xhc3M9InN0MiIgcG9pbnRzPSIzMTQuNywzMjMuMyAyNDkuNSw0MjYuMiAyMjUsNDI2LjIgMjk0LjEsMzIzLjMgCQkJIi8+DQoJCQk8Zz4NCgkJCQk8Zz4NCgkJCQkJPGRlZnM+DQoJCQkJCQk8cG9seWdvbiBpZD0iU1ZHSURfMDAwMDAwMjc1NzY0MTg5NDYyOTQ0NDcxMzAwMDAwMTY0MzY2NzA2MTc4NzAyOTY0NTlfIiBwb2ludHM9IjMxNC43LDMyMy4zIDI0OS41LDQyNi4yIDIyNSw0MjYuMiANCgkJCQkJCQkyOTQuMSwzMjMuMyAJCQkJCQkiLz4NCgkJCQkJPC9kZWZzPg0KCQkJCQk8Y2xpcFBhdGggaWQ9IlNWR0lEXzAwMDAwMDg0NTA0NjkyOTM2NDA2NjQ3MDAwMDAwMDEwNDAyMDQ3MzI3MjgzNDgxNDgxXyI+DQoJCQkJCQk8dXNlIHhsaW5rOmhyZWY9IiNTVkdJRF8wMDAwMDAyNzU3NjQxODk0NjI5NDQ0NzEzMDAwMDAxNjQzNjY3MDYxNzg3MDI5NjQ1OV8iIHN0eWxlPSJvdmVyZmxvdzp2aXNpYmxlOyIvPg0KCQkJCQk8L2NsaXBQYXRoPg0KCQkJCQk8cGF0aCBzdHlsZT0ib3BhY2l0eTowLjc1O2NsaXAtcGF0aDp1cmwoI1NWR0lEXzAwMDAwMDg0NTA0NjkyOTM2NDA2NjQ3MDAwMDAwMDEwNDAyMDQ3MzI3MjgzNDgxNDgxXyk7ZmlsbDojQ0VEOEJGO2VuYWJsZS1iYWNrZ3JvdW5kOm5ldyAgICA7IiBkPSJNMzE0LjcsMzIzLjNWMzk5aC0yMC43di03NS42SDMxNC43eiIvPg0KCQkJCTwvZz4NCgkJCTwvZz4NCgkJPC9nPg0KCQk8cG9seWdvbiBjbGFzcz0ic3Q0IiBwb2ludHM9IjI5NC4xLDMyMy4zIDI5NC4xLDM1NiAzMTQuNywzMjMuMyAJCSIvPg0KCTwvZz4NCjwvZz4NCjwvc3ZnPg0K"}}' prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' sign-as arizcredits.testnet network-config testnet sign-with-keychain send
+```
 
-# Goals and roadmap
+### Submitting the Javascript code
 
-The project has already fulfilled the goal of compiling QuickJS to WebAssembly and integrate with a Rust smart contract. There is also a proof-of-concept Fungible Token contract integrated with a proxy to an OpenAI API. The goals ahead is to support the live implementations of this into the [WebAssembly Music](https://github.com/petersalomonsen/javascriptmusic) project and [Ariz portfolio](https://github.com/arizas/near-account-report).
+The special functions for the AI conversation and web4 should be posted as javascript code to the contract. Below is an example taking the content of the files [../fungibletoken/e2e/aiconversation.js](../fungibletoken/e2e/aiconversation.js) and [web4.js](./web4.js).
 
-Integrating with NEAR AI is also a natural next step in the evolution. Today NEAR AI is accessible by smarts contract emitting events, and with the Javascript layer provided here, it is possible to provide such events in a more dynamic way. The logic to generate the events can be altered without having to redeploy the entire smart contract, and also using function access keys instead of full access keys.
+The first command `yarn aiproxy:web4bundle` takes the `index.html` and `main.js` files in the [web](./web/) folder, bundles it and encodes it as base64 in the `web4_get`function response, resulting in the file `web4.js`.
 
-Finally, for the project to get more attention, it needs more documentation. Even though it already contains comprehensive test cases that also serves as code examples, the documentation explaining the concepts can be developed even more.
+Note when creating the `JSON_ARGS`, that the `aiconversation.js` and `web4.js` files are concatenated and inserted into the `javascript` property of the function call args. In the file [aiconversation.js](../fungibletoken/e2e/aiconversation.js), there is the placeholder `REPLACE_REFUND_SIGNATURE_PUBLIC_KEY`, which needs to be replaced with the public key corresponding to the signing key passed to the AI proxy above. This replacement is also done in the command snippet below.
 
-These are all goals ahead for 2025.
+```bash
+export NETWORK_ID=mainnet
+export RPC_URL=https://rpc.mainnet.near.org
+export AI_PROXY_BASEURL=https://openai-proxy-zoukmtuw.fermyon.app
+export FUNGIBLE_TOKEN_CONTRACT_ID=arizcredits.near
+yarn aiproxy:web4bundle
+export JSON_ARGS=$(cat ../fungibletoken/e2e/aiconversation.js web4.js | sed "s/REPLACE_REFUND_SIGNATURE_PUBLIC_KEY/${REPLACE_REFUND_SIGNATURE_PUBLIC_KEY}/g" | jq -Rs '{javascript: .}')
+near contract call-function as-transaction arizcredits.near post_javascript json-args $JSON_ARGS prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' sign-as arizcredits.near network-config mainnet sign-with-keychain send
+```
+
+### Updating spin cloud variables
+
+If you need to update e.g. the signing key for refunding, you can update the variable in the spin cloud app like below. Here is an example with a signing key with the contents of the environment variable `SPIN_VARIABLE_REFUND_SIGNING_KEY`.
+
+```bash
+spin cloud variables set --app openai-proxy refund_signing_key=$SPIN_VARIABLE_REFUND_SIGNING_KEY
+```
