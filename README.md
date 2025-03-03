@@ -1,5 +1,7 @@
 # AI Proxy
 
+> courtesy of [quickjs-rust-near](https://github.com/petersalomonsen/quickjs-rust-near/tree/main/examples/aiproxy) and [web4](https://github.com/vgrichina/web4)
+
 This folder contains a [Spin](https://www.fermyon.com/spin) application, based on the WASI 2 and the WebAssembly Component Model ( https://component-model.bytecodealliance.org/ ). It is implemented in Rust as a serverless proxy for the OpenAI API.
 
 There is a simple example of a web client in the [web](./web/) folder.
