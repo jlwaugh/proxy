@@ -1,89 +1,152 @@
-function sha256(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return hash.toString(16);
+export function web4_get() {
+  const html = `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <title>AI Proxy Demo</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+      h1 { color: #333; }
+      .chat-container { border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+      #messages { height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+      textarea { width: 100%; padding: 10px; }
+      button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>AI Proxy Demo</h1>
+    <div class="chat-container">
+      <div id="messages"></div>
+      <textarea id="question" rows="3" placeholder="Type your message here..."></textarea>
+      <button id="askButton">Send Message</button>
+    </div>
+
+    <script>
+      const baseUrl = "https://ai-proxy-jkogrgu0.fermyon.app";
+      const proxyUrl = \`\${baseUrl}/proxy\`;
+      let conversation = [
+        { role: "system", content: "You are a helpful assistant." },
+      ];
+
+      document.getElementById('askButton').addEventListener('click', async () => {
+        const question = document.getElementById('question').value;
+        if (!question.trim()) return;
+
+        const messagesDiv = document.getElementById('messages');
+        document.getElementById('question').value = '';
+
+        messagesDiv.innerHTML += \`<div><strong>You:</strong> \${question}</div>\`;
+
+        conversation.push({ role: "user", content: question });
+
+        try {
+          const assistantElement = document.createElement('div');
+          assistantElement.innerHTML = \`<strong>Assistant:</strong> <div class="loading">Thinking...</div>\`;
+          messagesDiv.appendChild(assistantElement);
+
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+          const response = await fetch(proxyUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages: conversation })
+          });
+
+          if (!response.ok) {
+            throw new Error(\`Error: \${response.status}\`);
+          }
+
+          const reader = response.body.getReader();
+          let assistantResponse = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = new TextDecoder().decode(value);
+            const lines = chunk.split("\\n");
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.substring(6);
+                if (data === "[DONE]") continue;
+
+                try {
+                  const parsed = JSON.parse(data);
+
+                  if (parsed.choices &&
+                      parsed.choices.length > 0 &&
+                      parsed.choices[0].delta &&
+                      parsed.choices[0].delta.content) {
+
+                    assistantResponse += parsed.choices[0].delta.content;
+                    assistantElement.innerHTML = \`<strong>Assistant:</strong> \${assistantResponse}\`;
+                  }
+                } catch (e) {
+                  console.error("Error parsing JSON:", e);
+                }
+              }
+            }
+          }
+
+          conversation.push({ role: "assistant", content: assistantResponse });
+
+        } catch (error) {
+          console.error(error);
+          messagesDiv.innerHTML += \`<div><strong>Error:</strong> \${error.message}</div>\`;
+        }
+      });
+    </script>
+  </body>
+  </html>
+  `;
+
+  env.value_return(
+    JSON.stringify({
+      contentType: "text/html; charset=UTF-8",
+      body: env.base64_encode(html)
+    })
+  );
 }
 
 export function start_ai_conversation() {
-  const amount = 200_000_000n;
-  const { conversation_id } = JSON.parse(env.input());
+  const args = JSON.parse(env.input());
+  const conversation_id = args.conversation_id;
+
   if (!conversation_id) {
-    env.panic(`must provide conversation_id`);
+    env.panic("Error: must provide conversation_id");
     return;
   }
-  
-  const hashed_id = conversation_id;
-  
-  const existing_conversation = env.get_data(hashed_id);
+
+  const existing_conversation = env.get_data(conversation_id);
   if (existing_conversation) {
-    env.panic(`conversation already exist`);
+    env.panic("Error: conversation already exists");
     return;
   }
-  
+
   env.set_data(
-    hashed_id,
+    conversation_id,
     JSON.stringify({
-      receiver_id: env.signer_account_id(),
-      amount: amount.toString(),
-    }),
+      active: true,
+    })
   );
-  
-  env.ft_transfer_internal(
-    env.signer_account_id(),
-    env.current_account_id(),
-    amount.toString(),
-  );
-  
-  env.value_return(hashed_id);
+
+  env.value_return(conversation_id);
 }
 
 export function view_ai_conversation() {
-  const { conversation_id } = JSON.parse(env.input());
-  env.value_return(env.get_data(conversation_id));
-}
+  const args = JSON.parse(env.input());
+  const conversation_id = args.conversation_id;
 
-export function refund_unspent() {
-  const { refund_message, signature } = JSON.parse(env.input());
-  const public_key = new Uint8Array([211,204,160,145,102,174,54,214,18,83,210,237,37,147,217,197,222,229,218,172,137,0,97,167,145,138,150,234,130,12,0,112]);
-
-  const signature_is_valid = env.ed25519_verify(
-    new Uint8Array(signature),
-    new Uint8Array(env.sha256_utf8(refund_message)),
-    public_key,
-  );
-
-  if (signature_is_valid) {
-    const { receiver_id, refund_amount, conversation_id } =
-      JSON.parse(refund_message);
-
-    const conversation_data = JSON.parse(env.get_data(conversation_id));
-
-    if (BigInt(conversation_data.amount) >= BigInt(refund_amount)) {
-      env.clear_data(conversation_id);
-      env.ft_transfer_internal(
-        env.current_account_id(),
-        receiver_id,
-        refund_amount,
-      );
-      print(`refunded ${refund_amount} to ${receiver_id}`);
-    }
-  } else {
-    env.panic("Invalid signature");
+  if (!conversation_id) {
+    env.panic("Error: must provide conversation_id");
+    return;
   }
-}
 
-export function buy_tokens_for_near() {
-  if (env.attached_deposit() === 500_000_000_000_000_000_000_000n.toString()) {
-    env.ft_transfer_internal(
-      env.current_account_id(),
-      env.predecessor_account_id(),
-      3_000_000n.toString(),
-    );
-  } else {
-    env.panic("Must attach 0.5 NEAR to get 3 tokens");
+  const data = env.get_data(conversation_id);
+  if (!data) {
+    env.panic(`Error: No conversation found for ${conversation_id}`);
   }
+
+  env.value_return(data);
 }

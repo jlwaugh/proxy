@@ -31,7 +31,7 @@ try {
 }
 
 const walletSelector = await setupWalletSelector({
-  network: "mainnet",
+  network: "testnet",
   modules: walletSelectorModules,
 });
 window.walletSelector = walletSelector;
@@ -47,13 +47,12 @@ document
   .getElementById("openWalletSelectorButton")
   .addEventListener("click", () => walletSelectorModal.show());
 
-const baseUrl = "http://localhost:3000"; // Replace with your actual Spin proxy URL
-const proxyUrl = `${baseUrl}/proxy-openai`;
+const baseUrl = "http://127.0.0.1:3000";
+const proxyUrl = `${baseUrl}/proxy`;
 let conversation = [
   { role: "system", content: "You are a helpful assistant." },
 ];
 
-const refundMessageArea = document.getElementById("refund_message_area");
 const progressModalElement = document.getElementById("progressmodal");
 const progressModal = new bootstrap.Modal(progressModalElement);
 
@@ -69,58 +68,6 @@ function setProgressErrorText(progressErrorText) {
   document.getElementById("progressbar").style.display = "none";
   document.getElementById("progressErrorAlert").style.display = "block";
   document.getElementById("progressErrorAlert").innerText = progressErrorText;
-}
-
-async function getRefundMessageFromAiProxy() {
-  const conversation_id = checkExistingConversationId();
-  if (!conversation_id) {
-    return;
-  }
-  setProgressModalText("Stopping conversation");
-  progressModal.show();
-  const requestBody = JSON.stringify({
-    conversation_id: conversation_id,
-  });
-  const headers = {
-    "Content-Type": "application/json",
-  };
-
-  const response = await fetch(`${baseUrl}/refund-conversation`, {
-    method: "POST",
-    headers: headers,
-    body: requestBody,
-  });
-  const refundMessage = await response.json();
-  refundMessageArea.innerHTML = JSON.stringify(refundMessage, null, 1);
-  progressModal.hide();
-  return refundMessage;
-}
-
-async function postRefundMessage(refundMessage) {
-  setProgressModalText("Posting refund message");
-  progressModal.show();
-  const selectedWallet = await walletSelector.wallet();
-
-  const result = await selectedWallet.signAndSendTransaction({
-    actions: [
-      {
-        type: "FunctionCall",
-        params: {
-          methodName: "call_js_func",
-          args: {
-            function_name: "refund_unspent",
-            ...refundMessage,
-          },
-          gas: "30000000000000",
-          deposit: "0",
-        },
-      },
-    ],
-  });
-  refundMessageArea.innerHTML = result.receipts_outcome[0].outcome.logs
-    .join("\n")
-    .trim();
-  progressModal.hide();
 }
 
 async function startAiProxyConversation() {
@@ -206,49 +153,81 @@ function escapeHtml(unsafe) {
 
 const askAIButton = document.getElementById("askAIButton");
 askAIButton.addEventListener("click", async () => {
-  let conversation_id = checkExistingConversationId();
-  if (conversation_id === null) {
-    conversation_id = await startAiProxyConversation();
-  }
+  const conversation_id = `demo_${new Date().getTime()}`;
+
   const question = document.getElementById("question").value;
   const messagesDiv = document.getElementById("messages");
-  document.getElementById("question").value = ""; // Clear input field
+  document.getElementById("question").value = "";
 
-  // Add user question to the conversation
   conversation.push({ role: "user", content: question });
   messagesDiv.innerHTML += `<strong>User:</strong> ${escapeHtml(question)}<br>`;
 
-  const messages = conversation;
-
   askAIButton.disabled = true;
   try {
-    // Add placeholder for the assistant's response
     let assistantResponseElement = document.createElement("div");
     assistantResponseElement.innerHTML = getProgressBarHTML();
     messagesDiv.appendChild(assistantResponseElement);
 
-    // Fetch the proxy endpoint with a POST request
-    const newMessages = await sendStreamingRequest({
-      proxyUrl,
-      conversation_id,
-      messages,
-      tools,
-      toolImplementations,
-      onError: (err) => {
-        messagesDiv.innerHTML += `<strong>Assistant:</strong> Failed to fetch from proxy: ${err.statusText} ${err.responText ?? ""} <br>`;
-      },
-      onChunk: (chunk) => {
-        assistantResponseElement.innerHTML = `<strong>Assistant:</strong> ${marked(chunk.assistantResponse)}`;
-      },
+    const response = await fetch("http://127.0.0.1:3000/proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: conversation })
     });
 
-    if (newMessages) {
-      conversation = newMessages;
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    console.log(conversation);
+
+    const reader = response.body.getReader();
+    let assistantResponse = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = new TextDecoder().decode(value);
+      console.log("Raw chunk received:", chunk);
+
+      const lines = chunk.split("\n");
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.substring(6);
+          if (data === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            console.log("Parsed data:", parsed);
+
+            if (parsed.choices &&
+                parsed.choices.length > 0 &&
+                parsed.choices[0].delta &&
+                parsed.choices[0].delta.content) {
+
+              assistantResponse += parsed.choices[0].delta.content;
+              assistantResponseElement.innerHTML = `<strong>Assistant:</strong> ${marked.parse(assistantResponse)}`;
+            }
+            else if (parsed.choices &&
+                    parsed.choices.length > 0 &&
+                    parsed.choices[0].message &&
+                    parsed.choices[0].message.content) {
+
+              assistantResponse = parsed.choices[0].message.content;
+              assistantResponseElement.innerHTML = `<strong>Assistant:</strong> ${marked.parse(assistantResponse)}`;
+              break;
+            }
+          } catch (e) {
+            console.error("Error parsing JSON:", e, "Raw data:", data);
+          }
+        }
+      }
+    }
+
+    conversation.push({ role: "assistant", content: assistantResponse });
+
   } catch (error) {
-    console.err(error);
-    messagesDiv.innerHTML += "<strong>Assistant:</strong> " + error + "<br>";
+    console.error(error);
+    messagesDiv.innerHTML += `<strong>Assistant:</strong> Error: ${error.message}<br>`;
   }
   askAIButton.disabled = false;
 });
@@ -307,16 +286,6 @@ askNearAIButton.addEventListener("click", async () => {
     messagesDiv.innerHTML += "<strong>Assistant:</strong> " + error + "<br>";
   }
   askNearAIButton.disabled = false;
-});
-
-document.getElementById("refundButton").addEventListener("click", async () => {
-  try {
-    const refundMessage = await getRefundMessageFromAiProxy();
-    await postRefundMessage(refundMessage);
-    localStorage.removeItem("conversation_id");
-  } catch (e) {
-    setProgressErrorText(e.toString());
-  }
 });
 
 handleNearAILoginCallback();

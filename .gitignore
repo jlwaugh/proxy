@@ -23,3 +23,8 @@ freeze_frames
 example-contracts.car
 yarn-error.log
 .spin/
+.github/
+*.wasm
+crt.pem
+spin.sig
+spin

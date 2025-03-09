@@ -23,12 +23,6 @@ if (!NETWORK_ID) {
   );
   process.exit(1);
 }
-if (!FUNGIBLE_TOKEN_CONTRACT_ID) {
-  console.error(
-    "Environment variable FUNGIBLE_TOKEN_CONTRACT_ID not set. Must be set to the fungible token contract id (e.g. arizcredits.near)",
-  );
-  process.exit(1);
-}
 
 export default {
   input: "./web/index.html",
@@ -42,10 +36,6 @@ export default {
         const js = readFileSync("dist/main.js")
           .toString()
           .replace("http://localhost:3000", AI_PROXY_BASEURL)
-          .replace(
-            `localStorage.getItem("contractId")`,
-            `"${FUNGIBLE_TOKEN_CONTRACT_ID}"`,
-          )
           .replace("http://localhost:14500", RPC_URL)
           .replace('"mainnet"', `"${NETWORK_ID}"`);
 
@@ -66,7 +56,7 @@ export function web4_get() {
         })
       );
 }
-        
+
       `,
         );
       },

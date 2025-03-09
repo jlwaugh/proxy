@@ -33,21 +33,18 @@ export async function sendStreamingRequest({
     return;
   }
 
-  // Read the streaming response using a ReadableStream
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8");
 
   const chunks = [];
   let toolCalls = {};
 
-  // Continuously read data from the stream
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
       break;
     }
 
-    // Decode the streamed chunk and parse it as JSON
     const chunk = decoder.decode(value, { stream: true });
     const lines = chunk.split("\n").filter((line) => line.trim() !== "");
     chunks.push(...lines);
@@ -66,7 +63,6 @@ export async function sendStreamingRequest({
             ) {
               const delta = parsed.choices[0].delta;
 
-              // Append text response
               if (delta.content) {
                 const newContent = delta.content;
                 assistantResponse += newContent;
@@ -106,7 +102,6 @@ export async function sendStreamingRequest({
 
   const tool_calls = Object.values(toolCalls);
 
-  // Create the assistant message with either content or tool_calls
   const assistantMessage = { role: "assistant" };
   if (assistantResponse) {
     assistantMessage.content = assistantResponse;
@@ -115,12 +110,11 @@ export async function sendStreamingRequest({
     assistantMessage.tool_calls = tool_calls;
   }
 
-  // Add assistant response to the message history
   messages.push(assistantMessage);
 
   if (assistantMessage.tool_calls) {
     const { messages: newMessages, assistantResponse: toolsAssistantResponse } =
-      await hanleToolCalls({
+      await handleToolCalls({
         assistantResponse,
         toolCalls: tool_calls,
         toolImplementations,
@@ -141,10 +135,10 @@ export async function sendStreamingRequest({
       onChunk,
     });
   }
-  return messages; // Return updated message history
+  return messages;
 }
 
-export async function hanleToolCalls({
+export async function handleToolCalls({
   assistantResponse = "",
   toolCalls,
   toolImplementations,
@@ -222,7 +216,6 @@ export async function nearAiChatCompletionRequest({
     }
   });
 
-  // Add assistant response to the message history
   const message = result.choices[0].message;
   messages.push(message);
   assistantResponse += message.content;
@@ -231,7 +224,7 @@ export async function nearAiChatCompletionRequest({
   const toolCalls = message.tool_calls;
   if (toolCalls) {
     const { messages: newMessages, assistantResponse: toolsAssistantResponse } =
-      await hanleToolCalls({
+      await handleToolCalls({
         assistantResponse,
         toolCalls,
         toolImplementations,
