@@ -1,6 +1,6 @@
 [package]
-name = "ai-proxy"
-authors = ["Multi DAO <multidaomensional@gmail.com>"]
+name = "mcp-web4"
+authors = ["Multi Agency <multidaomensional@gmail.com>"]
 description = ""
 version = "0.1.0"
 edition = "2021"

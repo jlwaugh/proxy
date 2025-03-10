@@ -1,38 +1,41 @@
 spin_manifest_version = 2
 
 [application]
-name = "ai-proxy"
+name = "mcp-web4"
 version = "0.1.0"
-authors = ["Peter Salomonsen <pjsalomonsen@gmail.com>"]
-description = ""
+authors = ["Multi Agency <multidaomensional@gmail.com>"]
+description = "AI Proxy with MCP support"
 
 [[trigger.http]]
 route = "/..."
-component = "ai-proxy"
+component = "mcp-web4"
 
-[component.ai-proxy]
-source = "ai-proxy/target/wasm32-wasip1/release/ai_proxy.wasm"
-allowed_outbound_hosts = ["https://rpc.mainnet.fastnear.com:443", "https://api.openai.com:443", "https://*.openai.azure.com", "https://rpc.testnet.near.org:443", "https://rpc.mainnet.near.org:443", "http://localhost:14500", "http://127.0.0.1:3001"]
+[component.mcp-web4]
+source = "mcp-web4/target/wasm32-wasip1/release/mcp_web4.wasm"
+allowed_outbound_hosts = [
+    "https://rpc.mainnet.fastnear.com:443",
+    "https://api.openai.com:443",
+    "https://*.openai.azure.com",
+    "https://rpc.testnet.near.org:443",
+    "https://rpc.mainnet.near.org:443",
+    "http://localhost:14500",
+    "http://127.0.0.1:3001",
+    # Add any MCP server hosts you plan to connect to
+    "https://*.mcp-server.com:443",
+    "https://*:443", # HTTPS wildcard with port
+    "http://*:80"    # HTTP wildcard with port
+]
 key_value_stores = ["default"]
 
-[component.ai-proxy.build]
+[component.mcp-web4.build]
 command = "cargo build --target wasm32-wasip1 --release"
-workdir = "ai-proxy"
+workdir = "mcp-web4"
 watch = ["src/**/*.rs", "Cargo.toml"]
 
 [variables]
-api_key_method = { default = "authorization" }
-api_key = { required = true }
-ai_completions_endpoint = { required = true }
-rpc_url = {required = true }
+rpc_url = { required = true }
+mcp_server_endpoint = { default = "https://9e54-107-13-130-95.ngrok-free.app" }
 
-[component.ai-proxy.variables]
-api_key_method = "{{ api_key_method }}"
-api_key = "{{ api_key }}"
-ai_completions_endpoint =  "{{ ai_completions_endpoint }}"
+[component.mcp-web4.variables]
 rpc_url = "{{ rpc_url }}"
-
-[component.ai-proxy.tool.spin-test]
-source = "tests/target/wasm32-wasip1/release/tests.wasm"
-build = "cargo component build --release"
-workdir = "tests"
+mcp_server_endpoint = "{{ mcp_server_endpoint }}"
