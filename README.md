@@ -40,7 +40,7 @@ export function web4_get() {
 ```
 
 #### 3. Post the JavaScript
-Call `post_javascript` to put your JavaScript engine in the contract with a `web4_get` method implemented.
+Call `post_javascript` to put your JavaScript in the contract with a `web4_get` method implemented.
 
 ```bash
 near contract call-function as-transaction <account_id> post_javascript json-args $JSON_ARGS prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' sign-as <account_id> network-config testnet sign-with-keychain send
