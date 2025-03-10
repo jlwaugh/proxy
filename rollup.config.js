@@ -2,7 +2,7 @@ import { rollupPluginHTML as html } from "@web/rollup-plugin-html";
 import { terser } from "rollup-plugin-terser";
 import { readFileSync, writeFileSync } from "fs";
 
-const { AI_PROXY_BASEURL, RPC_URL, NETWORK_ID, FUNGIBLE_TOKEN_CONTRACT_ID } =
+const { AI_PROXY_BASEURL, RPC_URL, NETWORK_ID } =
   process.env;
 
 if (!AI_PROXY_BASEURL) {

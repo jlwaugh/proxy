@@ -23,7 +23,7 @@ watch = ["src/**/*.rs", "Cargo.toml"]
 [variables]
 api_key_method = { default = "authorization" }
 api_key = { required = true }
-ai_completions_endpoint = { required = true }
+ai_completions_endpoint = { default = "https://api.openai.com/v1/chat/completions" }
 rpc_url = {required = true }
 
 [component.ai-proxy.variables]

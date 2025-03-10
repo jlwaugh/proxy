@@ -22,7 +22,7 @@ export function web4_get() {
     </div>
 
     <script>
-      const baseUrl = "https://ai-proxy-jkogrgu0.fermyon.app";
+      const baseUrl = "http://localhost:3000";
       const proxyUrl = \`\${baseUrl}/proxy\`;
       let conversation = [
         { role: "system", content: "You are a helpful assistant." },
